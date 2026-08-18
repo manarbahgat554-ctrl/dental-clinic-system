@@ -28,10 +28,21 @@ const allowedOrigins = [
   'http://localhost:5175',
 ];
 
+// Add production frontend URL from environment variables
+if (process.env.CLIENT_URL) {
+  const productionOrigins = process.env.CLIENT_URL
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean);
+
+  allowedOrigins.push(...productionOrigins);
+}
+
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests without an Origin header
+      // (Postman, server-to-server requests, health checks, etc.)
       if (!origin) {
         return callback(null, true);
       }
@@ -40,8 +51,11 @@ app.use(
         return callback(null, true);
       }
 
+      console.error(`❌ CORS blocked origin: ${origin}`);
+
       return callback(new Error(`CORS blocked origin: ${origin}`));
     },
+
     credentials: true,
   }),
 );
