@@ -1,0 +1,30 @@
+# Frontend
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+# Backend
+backend/node_modules/
+backend/dist/
+backend/uploads/
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Temporary admin/database scripts
+backend/create-admin.ts
+backend/create-admin-clinic.ts
+backend/move-admin.ts
+backend/check-admins.ts

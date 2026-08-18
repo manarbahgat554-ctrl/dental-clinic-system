@@ -1,0 +1,523 @@
+// Prisma schema for Dental Clinic Management System
+// PostgreSQL on Neon
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Core: Clinic, Users, Auth
+// ============================================================
+
+model Clinic {
+  id              String   @id @default(uuid())
+  name            String
+  address         String?
+  phone           String?
+  email           String?
+  logoUrl         String?
+  city            String?
+  timezone        String   @default("UTC")
+  currencyCode    String   @default("USD")
+  language        String   @default("en")
+  defaultLanguage String   @default("en")
+  invoicePrefix   String   @default("INV")
+  taxPercentage   Decimal  @default(0) @db.Decimal(5, 2)
+  countryId       Int?
+  whatsappNumber  String?
+  instapayHandle  String?
+  instapayUrl     String?
+  facebookUrl     String?
+  instagramUrl    String?
+  websiteUrl      String?
+  aiProvider      String   @default("openai")
+  aiApiKeyEncrypted String?
+  workingHours    Json?
+  settings        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  country         Country? @relation(fields: [countryId], references: [id])
+  users           User[]
+  patients        Patient[]
+  appointments    Appointment[]
+  treatments      Treatment[]
+  invoices        Invoice[]
+  payments        Payment[]
+  inventoryItems  InventoryItem[]
+  labOrders       LabOrder[]
+  radiologyImages RadiologyImage[]
+  aiReports       AiRadiologyReport[]
+  aiChatMessages  AiChatMessage[]
+  radiologyComparisons RadiologyComparison[]
+
+  @@map("clinics")
+}
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  passwordHash    String
+  fullName        String
+  role            UserRole @default(DOCTOR)
+  phone           String?
+  avatarUrl       String?
+  specialization  String?
+  licenseNumber   String?
+  bio             String?
+  countryId       Int?
+  clinicId        String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  country         Country? @relation(fields: [countryId], references: [id])
+  appointments    Appointment[] @relation("DoctorAppointments")
+  radiologyImages RadiologyImage[]
+  aiReports       AiRadiologyReport[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  DOCTOR
+  RECEPTIONIST
+  ASSISTANT
+  LAB_TECHNICIAN
+  ACCOUNTANT
+  PATIENT
+}
+
+// ============================================================
+// Countries & Currencies
+// ============================================================
+
+model Country {
+  id              Int      @id @default(autoincrement())
+  name            String   @unique
+  nameAr          String   @default("")
+  iso2            String?  @unique
+  iso3            String?  @unique
+  dialCode        String?
+  currencyCode    String   @default("USD")
+  currencyName    String   @default("US Dollar")
+  currencySymbol  String   @default("$")
+  defaultLanguage String   @default("en")
+  region          String?
+  timezone        String   @default("UTC")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  clinics         Clinic[]
+  users           User[]
+  patients        Patient[]
+  currencies      Currency[]
+
+  @@map("countries")
+}
+
+model Currency {
+  id              Int      @id @default(autoincrement())
+  code            String   @unique
+  name            String
+  symbol          String
+  countryId       Int?
+  exchangeRate    Decimal  @default(1) @db.Decimal(10, 4)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  country         Country? @relation(fields: [countryId], references: [id])
+
+  @@map("currencies")
+}
+
+// ============================================================
+// Patients
+// ============================================================
+
+model Patient {
+  id              String   @id @default(uuid())
+  clinicId        String
+  firstName       String
+  lastName        String
+  dateOfBirth     DateTime?
+  gender          String?
+  bloodGroup      String?
+  phone           String?
+  email           String?
+  address         String?
+  emergencyContact String?
+  emergencyPhone  String?
+  insuranceProvider String?
+  insuranceNumber String?
+  medicalHistory  Json?
+  allergies       String[]
+  medications     String[]
+  smoking         Boolean  @default(false)
+  pregnant        Boolean  @default(false)
+  bloodPressure   String?
+  heartCondition  Boolean  @default(false)
+  diabetes        Boolean  @default(false)
+  previousSurgeries String?
+  status          PatientStatus @default(ACTIVE)
+  countryId       Int?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  country         Country? @relation(fields: [countryId], references: [id])
+  appointments    Appointment[]
+  treatments      Treatment[]
+  invoices        Invoice[]
+  labOrders       LabOrder[]
+  radiologyImages RadiologyImage[]
+  aiReports       AiRadiologyReport[]
+  aiChatMessages  AiChatMessage[]
+  toothRecords    ToothRecord[]
+  radiologyComparisons RadiologyComparison[]
+
+  @@index([clinicId])
+  @@map("patients")
+}
+
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+// ============================================================
+// Appointments
+// ============================================================
+
+model Appointment {
+  id              String   @id @default(uuid())
+  clinicId        String
+  patientId       String
+  doctorId        String?
+  title           String
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  status          AppointmentStatus @default(SCHEDULED)
+  type            String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor          User?    @relation("DoctorAppointments", fields: [doctorId], references: [id])
+
+  @@index([clinicId, startTime])
+  @@index([patientId])
+  @@map("appointments")
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// ============================================================
+// Treatments
+// ============================================================
+
+model Treatment {
+  id              String   @id @default(uuid())
+  clinicId        String
+  patientId       String
+  toothNumber     Int?
+  diagnosis       String
+  treatmentPlan   String?
+  status          TreatmentStatus @default(PLANNED)
+  cost            Decimal  @default(0) @db.Decimal(10, 2)
+  paidAmount      Decimal  @default(0) @db.Decimal(10, 2)
+  startDate       DateTime?
+  endDate         DateTime?
+  notes           String?
+  progress        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@map("treatments")
+}
+
+enum TreatmentStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ============================================================
+// Invoices & Payments
+// ============================================================
+
+model Invoice {
+  id              String   @id @default(uuid())
+  clinicId        String
+  patientId       String
+  invoiceNumber   String
+  amount          Decimal  @db.Decimal(10, 2)
+  taxAmount       Decimal  @default(0) @db.Decimal(10, 2)
+  discountAmount  Decimal  @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal  @db.Decimal(10, 2)
+  paidAmount      Decimal  @default(0) @db.Decimal(10, 2)
+  currency        String   @default("USD")
+  status          InvoiceStatus @default(PENDING)
+  dueDate         DateTime?
+  items           Json?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  payments        Payment[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+  CANCELLED
+}
+
+model Payment {
+  id              String   @id @default(uuid())
+  clinicId        String
+  invoiceId       String
+  patientId       String?
+  amount          Decimal  @db.Decimal(10, 2)
+  currency        String   @default("USD")
+  method          String   @default("cash")
+  reference       String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+// ============================================================
+// Dental Chart / Tooth Records
+// ============================================================
+
+model ToothRecord {
+  id              String   @id @default(uuid())
+  patientId       String
+  toothNumber     Int
+  status          String   @default("healthy")
+  surfaces        String[]
+  notes           String?
+  treatmentDate   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, toothNumber])
+  @@index([patientId])
+  @@map("tooth_records")
+}
+
+// ============================================================
+// Radiology / Images
+// ============================================================
+
+model RadiologyImage {
+  id              String   @id @default(uuid())
+  clinicId        String
+  patientId       String
+  uploadedBy      String?
+  imageUrl        String
+  publicId        String?
+  imageName       String
+  imageType       String
+  fileExt         String?
+  notes           String?
+  toothNumber     Int?
+  createdAt       DateTime @default(now())
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  uploadedByUser  User?    @relation(fields: [uploadedBy], references: [id])
+  aiReports       AiRadiologyReport[]
+  aiChatMessages  AiChatMessage[]
+  comparisonsAsA  RadiologyComparison[] @relation("ImageA")
+  comparisonsAsB  RadiologyComparison[] @relation("ImageB")
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@map("radiology_images")
+}
+
+// ============================================================
+// AI Reports & Chat
+// ============================================================
+
+model AiRadiologyReport {
+  id              String   @id @default(uuid())
+  clinicId        String
+  patientId       String
+  radiologyImageId String?
+  uploadedBy      String?
+  imageType       String
+  findings        Json
+  imageQualityScore Int    @default(0)
+  confidenceScore Int      @default(0)
+  riskLevel       String   @default("low")
+  recommendations String[]
+  suggestedTreatmentPlan String?
+  urgencyLevel    String   @default("routine")
+  suggestedNextAppointment String?
+  reportSummary   String?
+  status          String   @default("completed")
+  createdAt       DateTime @default(now())
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  radiologyImage  RadiologyImage? @relation(fields: [radiologyImageId], references: [id], onDelete: SetNull)
+  uploadedByUser  User?    @relation(fields: [uploadedBy], references: [id])
+
+  @@index([patientId])
+  @@map("ai_radiology_reports")
+}
+
+model AiChatMessage {
+  id              String   @id @default(uuid())
+  clinicId        String
+  patientId       String
+  radiologyImageId String?
+  role            String
+  content         String
+  createdAt       DateTime @default(now())
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  radiologyImage  RadiologyImage? @relation(fields: [radiologyImageId], references: [id], onDelete: Cascade)
+
+  @@index([radiologyImageId])
+  @@index([patientId])
+  @@map("ai_chat_messages")
+}
+
+model RadiologyComparison {
+  id              String   @id @default(uuid())
+  clinicId        String
+  patientId       String
+  imageAId        String
+  imageBId        String
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  imageA          RadiologyImage @relation("ImageA", fields: [imageAId], references: [id], onDelete: Cascade)
+  imageB          RadiologyImage @relation("ImageB", fields: [imageBId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("radiology_comparisons")
+}
+
+// ============================================================
+// Inventory
+// ============================================================
+
+model InventoryItem {
+  id              String   @id @default(uuid())
+  clinicId        String
+  name            String
+  category        String?
+  sku             String?
+  quantity        Int      @default(0)
+  minQuantity     Int      @default(0)
+  unitPrice       Decimal  @default(0) @db.Decimal(10, 2)
+  supplier        String?
+  expiryDate      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@map("inventory_items")
+}
+
+// ============================================================
+// Lab Orders
+// ============================================================
+
+model LabOrder {
+  id              String   @id @default(uuid())
+  clinicId        String
+  patientId       String
+  orderNumber     String
+  workType        String
+  description     String?
+  status          LabOrderStatus @default(PENDING)
+  dueDate         DateTime?
+  cost            Decimal  @default(0) @db.Decimal(10, 2)
+  labName         String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@map("lab_orders")
+}
+
+enum LabOrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DELIVERED
+}
+
+// ============================================================
+// Notifications
+// ============================================================
+
+model Notification {
+  id              String   @id @default(uuid())
+  clinicId        String
+  userId          String?
+  title           String
+  message         String
+  type            String   @default("info")
+  isRead          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@map("notifications")
+}
